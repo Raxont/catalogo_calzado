@@ -554,73 +554,63 @@ const App = () => {
               <div className="form-grid">
                 <input
                   type="text"
-                  placeholder="Nombre"
+                  placeholder="Nombre (opcional)"
                   value={newShoe.name}
                   onChange={(e) => setNewShoe(prev => ({...prev, name: e.target.value}))}
-                  required
                 />
                 <input
                   type="text"
-                  placeholder="Marca"
+                  placeholder="Marca (opcional)"
                   value={newShoe.brand}
                   onChange={(e) => setNewShoe(prev => ({...prev, brand: e.target.value}))}
-                  required
                 />
                 <input
                   type="text"
-                  placeholder="Categoría"
+                  placeholder="Categoría (opcional)"
                   value={newShoe.category}
                   onChange={(e) => setNewShoe(prev => ({...prev, category: e.target.value}))}
-                  required
                 />
                 <input
                   type="text"
-                  placeholder="Suela"
+                  placeholder="Suela (opcional)"
                   value={newShoe.sole}
                   onChange={(e) => setNewShoe(prev => ({...prev, sole: e.target.value}))}
-                  required
                 />
                 <input
                   type="text"
-                  placeholder="Color"
+                  placeholder="Color (opcional)"
                   value={newShoe.color}
                   onChange={(e) => setNewShoe(prev => ({...prev, color: e.target.value}))}
-                  required
                 />
                 <input
                   type="text"
-                  placeholder="Referencia"
+                  placeholder="Referencia (opcional)"
                   value={newShoe.reference}
                   onChange={(e) => setNewShoe(prev => ({...prev, reference: e.target.value}))}
-                  required
                 />
                 <input
                   type="text"
-                  placeholder="Modelo"
+                  placeholder="Modelo (opcional)"
                   value={newShoe.model}
                   onChange={(e) => setNewShoe(prev => ({...prev, model: e.target.value}))}
-                  required
                 />
                 <input
                   type="number"
-                  placeholder="Precio"
+                  placeholder="Precio (opcional)"
                   value={newShoe.price}
                   onChange={(e) => setNewShoe(prev => ({...prev, price: e.target.value}))}
-                  required
                 />
                 <input
                   type="text"
-                  placeholder="Talla"
+                  placeholder="Talla (opcional)"
                   value={newShoe.size}
                   onChange={(e) => setNewShoe(prev => ({...prev, size: e.target.value}))}
-                  required
                 />
                 <input
                   type="text"
-                  placeholder="Material"
+                  placeholder="Material (opcional)"
                   value={newShoe.material}
                   onChange={(e) => setNewShoe(prev => ({...prev, material: e.target.value}))}
-                  required
                 />
               </div>
               
