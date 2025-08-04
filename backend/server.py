@@ -40,17 +40,17 @@ ADMIN_PASSWORD = "zapatos2024"  # User can change this
 
 # Pydantic models
 class ShoeBase(BaseModel):
-    name: str
-    category: str
-    sole: str
-    color: str
-    reference: str
-    model: str
-    price: float
-    size: str
-    material: str
-    description: str
-    brand: str
+    name: Optional[str] = ""
+    category: Optional[str] = ""
+    sole: Optional[str] = ""
+    color: Optional[str] = ""
+    reference: Optional[str] = ""
+    model: Optional[str] = ""
+    price: Optional[float] = 0.0
+    size: Optional[str] = ""
+    material: Optional[str] = ""
+    description: Optional[str] = ""
+    brand: Optional[str] = ""
     image_base64: Optional[str] = None
 
 class ShoeCreate(ShoeBase):
