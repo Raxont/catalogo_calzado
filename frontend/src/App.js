@@ -37,6 +37,7 @@ const App = () => {
   const [adminPassword, setAdminPassword] = useState('');
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [showAddShoe, setShowAddShoe] = useState(false);
+  const [showCustomTheme, setShowCustomTheme] = useState(false);
   
   // New shoe form state
   const [newShoe, setNewShoe] = useState({
@@ -52,6 +53,16 @@ const App = () => {
     description: '',
     brand: '',
     image_base64: ''
+  });
+  
+  // Custom theme state
+  const [customTheme, setCustomTheme] = useState({
+    theme_name: '',
+    primary_color: '#000000',
+    secondary_color: '#ffffff',
+    background_color: '#f8f9fa',
+    text_color: '#212529',
+    accent_color: '#ff6b35'
   });
   
   // Selected shoe for detail view
