@@ -387,6 +387,12 @@ const App = () => {
                   Agregar Zapato
                 </button>
                 <button 
+                  onClick={() => setShowCustomTheme(true)}
+                  className="add-theme-btn"
+                >
+                  Crear Tema
+                </button>
+                <button 
                   onClick={() => setIsAdmin(false)}
                   className="logout-btn"
                 >
