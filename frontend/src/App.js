@@ -615,11 +615,10 @@ const App = () => {
               </div>
               
               <textarea
-                placeholder="Descripción"
+                placeholder="Descripción (opcional)"
                 value={newShoe.description}
                 onChange={(e) => setNewShoe(prev => ({...prev, description: e.target.value}))}
                 className="description-textarea"
-                required
               />
               
               <div className="image-upload">
