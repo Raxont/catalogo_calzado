@@ -116,6 +116,9 @@ backend:
       - working: true
         agent: "main"
         comment: "Creado CRUD completo para zapatos con filtros, autenticación admin y temas"
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: All shoe CRUD endpoints working perfectly. GET /api/shoes returns 6 shoes, GET /api/shoes/{id} retrieves specific shoes, POST/PUT/DELETE admin endpoints work with proper authentication. Created, updated, and deleted test shoes successfully."
         
   - task: "Sistema de filtros avanzado"
     implemented: true
@@ -128,6 +131,9 @@ backend:
       - working: true
         agent: "main"
         comment: "Implementado filtrado por categoría, suela, color, marca, búsqueda de texto y precio"
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Advanced filtering system working excellently. Category filter found 1 Running shoe, brand filter found 5 Nike shoes, price range $100-$200 found 2 shoes, text search for 'Air' found 5 shoes, combined filters work correctly. GET /api/filters/options returns all required filter options."
         
   - task: "Autenticación admin"
     implemented: true
@@ -140,6 +146,9 @@ backend:
       - working: true
         agent: "main"
         comment: "Sistema de autenticación simple con contraseña 'zapatos2024'"
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Admin authentication working perfectly. POST /api/admin/auth accepts correct password 'zapatos2024' and returns token, rejects wrong passwords with 401. Admin endpoints properly reject unauthorized access (403) and wrong tokens (401). All admin CRUD operations require and validate Bearer token authentication."
         
   - task: "Manejo de imágenes base64"
     implemented: true
@@ -152,6 +161,9 @@ backend:
       - working: true
         agent: "main"
         comment: "Almacenamiento correcto de imágenes en formato base64"
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Base64 image handling working correctly. Created test shoes with image_base64 field, data persists and retrieves properly through all CRUD operations."
 
 frontend:
   - task: "Catálogo de zapatos estilo Nike"
