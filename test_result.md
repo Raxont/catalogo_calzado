@@ -118,7 +118,7 @@ backend:
         comment: "Creado CRUD completo para zapatos con filtros, autenticación admin y temas"
       - working: true
         agent: "testing"
-        comment: "✅ TESTED: All shoe CRUD endpoints working perfectly. GET /api/shoes returns 6 shoes, GET /api/shoes/{id} retrieves specific shoes, POST/PUT/DELETE admin endpoints work with proper authentication. Created, updated, and deleted test shoes successfully."
+        comment: "✅ BACKEND TESTING COMPLETED - 19/19 tests passed. All CRUD operations working perfectly with proper authentication"
         
   - task: "Sistema de filtros avanzado"
     implemented: true
@@ -133,7 +133,7 @@ backend:
         comment: "Implementado filtrado por categoría, suela, color, marca, búsqueda de texto y precio"
       - working: true
         agent: "testing"
-        comment: "✅ TESTED: Advanced filtering system working excellently. Category filter found 1 Running shoe, brand filter found 5 Nike shoes, price range $100-$200 found 2 shoes, text search for 'Air' found 5 shoes, combined filters work correctly. GET /api/filters/options returns all required filter options."
+        comment: "✅ Advanced filtering by category, brand, price, text search working excellently"
         
   - task: "Autenticación admin"
     implemented: true
@@ -148,7 +148,7 @@ backend:
         comment: "Sistema de autenticación simple con contraseña 'zapatos2024'"
       - working: true
         agent: "testing"
-        comment: "✅ TESTED: Admin authentication working perfectly. POST /api/admin/auth accepts correct password 'zapatos2024' and returns token, rejects wrong passwords with 401. Admin endpoints properly reject unauthorized access (403) and wrong tokens (401). All admin CRUD operations require and validate Bearer token authentication."
+        comment: "✅ Admin authentication with password 'zapatos2024' working perfectly, proper security"
         
   - task: "Manejo de imágenes base64"
     implemented: true
@@ -163,7 +163,7 @@ backend:
         comment: "Almacenamiento correcto de imágenes en formato base64"
       - working: true
         agent: "testing"
-        comment: "✅ TESTED: Base64 image handling working correctly. Created test shoes with image_base64 field, data persists and retrieves properly through all CRUD operations."
+        comment: "✅ Base64 image handling working correctly through all operations"
 
 frontend:
   - task: "Catálogo de zapatos estilo Nike"
