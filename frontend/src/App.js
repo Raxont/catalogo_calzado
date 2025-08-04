@@ -650,6 +650,137 @@ const App = () => {
         </div>
       )}
 
+      {/* Custom Theme Modal */}
+      {showCustomTheme && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <h2>Crear Tema Personalizado</h2>
+            <form onSubmit={handleAddCustomTheme} className="custom-theme-form">
+              <input
+                type="text"
+                placeholder="Nombre del tema"
+                value={customTheme.theme_name}
+                onChange={(e) => setCustomTheme(prev => ({...prev, theme_name: e.target.value}))}
+                required
+                className="theme-name-input"
+              />
+              
+              <div className="color-inputs-grid">
+                <div className="color-input-group">
+                  <label>Color Primario:</label>
+                  <input
+                    type="color"
+                    value={customTheme.primary_color}
+                    onChange={(e) => setCustomTheme(prev => ({...prev, primary_color: e.target.value}))}
+                    className="color-input"
+                  />
+                  <input
+                    type="text"
+                    value={customTheme.primary_color}
+                    onChange={(e) => setCustomTheme(prev => ({...prev, primary_color: e.target.value}))}
+                    className="color-text-input"
+                  />
+                </div>
+                
+                <div className="color-input-group">
+                  <label>Color Secundario:</label>
+                  <input
+                    type="color"
+                    value={customTheme.secondary_color}
+                    onChange={(e) => setCustomTheme(prev => ({...prev, secondary_color: e.target.value}))}
+                    className="color-input"
+                  />
+                  <input
+                    type="text"
+                    value={customTheme.secondary_color}
+                    onChange={(e) => setCustomTheme(prev => ({...prev, secondary_color: e.target.value}))}
+                    className="color-text-input"
+                  />
+                </div>
+                
+                <div className="color-input-group">
+                  <label>Color de Fondo:</label>
+                  <input
+                    type="color"
+                    value={customTheme.background_color}
+                    onChange={(e) => setCustomTheme(prev => ({...prev, background_color: e.target.value}))}
+                    className="color-input"
+                  />
+                  <input
+                    type="text"
+                    value={customTheme.background_color}
+                    onChange={(e) => setCustomTheme(prev => ({...prev, background_color: e.target.value}))}
+                    className="color-text-input"
+                  />
+                </div>
+                
+                <div className="color-input-group">
+                  <label>Color de Texto:</label>
+                  <input
+                    type="color"
+                    value={customTheme.text_color}
+                    onChange={(e) => setCustomTheme(prev => ({...prev, text_color: e.target.value}))}
+                    className="color-input"
+                  />
+                  <input
+                    type="text"
+                    value={customTheme.text_color}
+                    onChange={(e) => setCustomTheme(prev => ({...prev, text_color: e.target.value}))}
+                    className="color-text-input"
+                  />
+                </div>
+                
+                <div className="color-input-group">
+                  <label>Color de Acento:</label>
+                  <input
+                    type="color"
+                    value={customTheme.accent_color}
+                    onChange={(e) => setCustomTheme(prev => ({...prev, accent_color: e.target.value}))}
+                    className="color-input"
+                  />
+                  <input
+                    type="text"
+                    value={customTheme.accent_color}
+                    onChange={(e) => setCustomTheme(prev => ({...prev, accent_color: e.target.value}))}
+                    className="color-text-input"
+                  />
+                </div>
+              </div>
+              
+              <div className="theme-preview" style={{
+                backgroundColor: customTheme.background_color,
+                color: customTheme.text_color,
+                padding: '1rem',
+                borderRadius: '8px',
+                border: `2px solid ${customTheme.primary_color}`,
+                marginTop: '1rem'
+              }}>
+                <h3 style={{ color: customTheme.primary_color }}>Vista Previa del Tema</h3>
+                <p>Texto normal con color: {customTheme.text_color}</p>
+                <button style={{
+                  backgroundColor: customTheme.accent_color,
+                  color: 'white',
+                  border: 'none',
+                  padding: '0.5rem 1rem',
+                  borderRadius: '4px'
+                }}>
+                  Botón de Acento
+                </button>
+              </div>
+              
+              <div className="modal-actions">
+                <button type="submit" className="add-btn">
+                  Crear Tema
+                </button>
+                <button type="button" onClick={() => setShowCustomTheme(false)} className="cancel-btn">
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Shoe Detail Modal */}
       {selectedShoe && (
         <div className="modal-overlay">
