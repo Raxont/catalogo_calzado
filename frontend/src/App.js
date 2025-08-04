@@ -246,16 +246,22 @@ const App = () => {
     e.preventDefault();
     
     try {
+      const shoeData = { ...newShoe };
+      
+      // Convert price to number if provided, otherwise set to 0
+      if (shoeData.price) {
+        shoeData.price = parseFloat(shoeData.price);
+      } else {
+        shoeData.price = 0;
+      }
+      
       const response = await fetch(`${BACKEND_URL}/api/admin/shoes`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${adminPassword}`
         },
-        body: JSON.stringify({
-          ...newShoe,
-          price: parseFloat(newShoe.price)
-        })
+        body: JSON.stringify(shoeData)
       });
 
       if (response.ok) {
@@ -277,8 +283,49 @@ const App = () => {
         });
         setShowAddShoe(false);
         loadFilterOptions(); // Reload filter options
+        alert('Zapato agregado exitosamente!');
       } else {
         alert('Error al agregar el zapato');
+      }
+    } catch (err) {
+      alert('Error de conexión');
+    }
+  };
+
+  // Add custom theme
+  const handleAddCustomTheme = async (e) => {
+    e.preventDefault();
+    
+    if (!customTheme.theme_name.trim()) {
+      alert('El nombre del tema es requerido');
+      return;
+    }
+    
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/admin/themes`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${adminPassword}`
+        },
+        body: JSON.stringify(customTheme)
+      });
+
+      if (response.ok) {
+        const newTheme = await response.json();
+        setThemes(prev => [...prev, newTheme]);
+        setCustomTheme({
+          theme_name: '',
+          primary_color: '#000000',
+          secondary_color: '#ffffff',
+          background_color: '#f8f9fa',
+          text_color: '#212529',
+          accent_color: '#ff6b35'
+        });
+        setShowCustomTheme(false);
+        alert('Tema personalizado creado exitosamente!');
+      } else {
+        alert('Error al crear el tema');
       }
     } catch (err) {
       alert('Error de conexión');
