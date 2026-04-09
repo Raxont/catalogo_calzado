@@ -13,8 +13,8 @@ import sys
 import os
 
 # Get backend URL from environment
-BACKEND_URL = "https://1c5f08a5-91fe-4a98-ba6d-ef5144286764.preview.emergentagent.com/api"
-ADMIN_PASSWORD = "zapatos2024"
+BACKEND_URL = "http://localhost:8000/api"
+ADMIN_PASSWORD = "zapatos"
 
 class ShoeAPITester:
     def __init__(self):
