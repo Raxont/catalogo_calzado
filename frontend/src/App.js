@@ -183,19 +183,22 @@ const ShoeCard = ({ shoe, onClick, isAdmin, onEdit, onDelete }) => {
   const [imgLoaded, setImgLoaded] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [pos, setPos] = useState({ x: 0, y: 0 });
+  const imgWrapRef = useRef();
   const dragging = useRef(false);
   const dragStart = useRef({ x: 0, y: 0 });
-  const currentPos = useRef({ x: 0, y: 0 });
-  const currentZoom = useRef(1);
-  const imgWrapRef = useRef();
+  const posRef = useRef({ x: 0, y: 0 });
+  const zoomRef = useRef(1);
+  const lastTap = useRef(0);
   const lastTouchDist = useRef(null);
+  const moved = useRef(false);
+  const [activeVariant, setActiveVariant] = useState(0);
+  const variants = shoe.variants || [];
+  const activeImg = variants[activeVariant]?.main_image || shoe.image_base64;
 
-  const isZoomed = zoom > 1;
-
-  const clampPos = (x, y, z) => {
+  const clamp = (x, y, z) => {
     const el = imgWrapRef.current;
     if (!el) return { x, y };
-    const maxX = (el.offsetWidth  * (z - 1)) / 2;
+    const maxX = (el.offsetWidth * (z - 1)) / 2;
     const maxY = (el.offsetHeight * (z - 1)) / 2;
     return {
       x: Math.max(-maxX, Math.min(maxX, x)),
@@ -203,75 +206,103 @@ const ShoeCard = ({ shoe, onClick, isAdmin, onEdit, onDelete }) => {
     };
   };
 
-  // Registrar wheel con passive:false para poder hacer preventDefault
+  const applyZoom = (next) => {
+    const clamped = clamp(posRef.current.x, posRef.current.y, next);
+    zoomRef.current = next;
+    posRef.current = clamped;
+    setZoom(next);
+    setPos(clamped);
+  };
+
+  const reset = () => {
+    zoomRef.current = 1;
+    posRef.current = { x: 0, y: 0 };
+    setZoom(1);
+    setPos({ x: 0, y: 0 });
+  };
+
+  // ── Wheel (desktop) ────────────────────────────────────────────────────────
   useEffect(() => {
     const el = imgWrapRef.current;
     if (!el) return;
     const onWheel = (e) => {
       e.preventDefault();
-      e.stopPropagation();
       const delta = e.deltaY < 0 ? 0.25 : -0.25;
-      const next = Math.min(3, Math.max(1, currentZoom.current + delta));
-      const clamped = clampPos(currentPos.current.x, currentPos.current.y, next);
-      currentZoom.current = next;
-      currentPos.current = clamped;
-      setZoom(next);
-      setPos(clamped);
+      applyZoom(Math.min(3, Math.max(1, zoomRef.current + delta)));
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
   }, []);
 
-  // Registrar mousemove y mouseup en window para no perder eventos al salir del card
+  // ── Mouse drag en window (desktop) ────────────────────────────────────────
   useEffect(() => {
-    const onMouseMove = (e) => {
+    const onMove = (e) => {
       if (!dragging.current) return;
-      const clamped = clampPos(
+      moved.current = true;
+      const c = clamp(
         e.clientX - dragStart.current.x,
         e.clientY - dragStart.current.y,
-        currentZoom.current
+        zoomRef.current,
       );
-      currentPos.current = clamped;
-      setPos({ ...clamped });
+      posRef.current = c;
+      setPos({ ...c });
     };
-    const onMouseUp = () => {
+    const onUp = () => {
       dragging.current = false;
     };
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
     return () => {
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
     };
   }, []);
 
-  const handleMouseDown = (e) => {
-    if (currentZoom.current <= 1) return;
+  const onMouseDown = (e) => {
+    if (zoomRef.current <= 1) return;
     e.preventDefault();
     e.stopPropagation();
+    moved.current = false;
     dragging.current = true;
     dragStart.current = {
-      x: e.clientX - currentPos.current.x,
-      y: e.clientY - currentPos.current.y,
+      x: e.clientX - posRef.current.x,
+      y: e.clientY - posRef.current.y,
     };
   };
 
-  const handleTouchStart = (e) => {
-    if (e.touches.length === 2) {
+  // ── Touch (móvil) ─────────────────────────────────────────────────────────
+  const onTouchStart = (e) => {
+    if (e.touches.length === 1) {
+      // Doble tap → zoom
+      const now = Date.now();
+      if (now - lastTap.current < 300) {
+        e.preventDefault();
+        if (zoomRef.current > 1) reset();
+        else applyZoom(2);
+        lastTap.current = 0;
+        return;
+      }
+      lastTap.current = now;
+
+      // Drag si hay zoom
+      if (zoomRef.current > 1) {
+        e.preventDefault();
+        dragging.current = true;
+        moved.current = false;
+        dragStart.current = {
+          x: e.touches[0].clientX - posRef.current.x,
+          y: e.touches[0].clientY - posRef.current.y,
+        };
+      }
+    } else if (e.touches.length === 2) {
+      e.preventDefault();
       const dx = e.touches[0].clientX - e.touches[1].clientX;
       const dy = e.touches[0].clientY - e.touches[1].clientY;
       lastTouchDist.current = Math.hypot(dx, dy);
-    } else if (e.touches.length === 1 && currentZoom.current > 1) {
-      e.preventDefault();
-      dragging.current = true;
-      dragStart.current = {
-        x: e.touches[0].clientX - currentPos.current.x,
-        y: e.touches[0].clientY - currentPos.current.y,
-      };
     }
   };
 
-  const handleTouchMove = (e) => {
+  const onTouchMove = (e) => {
     if (e.touches.length === 2) {
       e.preventDefault();
       const dx = e.touches[0].clientX - e.touches[1].clientX;
@@ -279,42 +310,37 @@ const ShoeCard = ({ shoe, onClick, isAdmin, onEdit, onDelete }) => {
       const dist = Math.hypot(dx, dy);
       if (lastTouchDist.current) {
         const delta = (dist - lastTouchDist.current) * 0.015;
-        const next = Math.min(3, Math.max(1, currentZoom.current + delta));
-        const clamped = clampPos(currentPos.current.x, currentPos.current.y, next);
-        currentZoom.current = next;
-        currentPos.current = clamped;
-        setZoom(next);
-        setPos(clamped);
+        applyZoom(Math.min(3, Math.max(1, zoomRef.current + delta)));
       }
       lastTouchDist.current = dist;
     } else if (e.touches.length === 1 && dragging.current) {
       e.preventDefault();
-      const clamped = clampPos(
+      moved.current = true;
+      const c = clamp(
         e.touches[0].clientX - dragStart.current.x,
         e.touches[0].clientY - dragStart.current.y,
-        currentZoom.current
+        zoomRef.current,
       );
-      currentPos.current = clamped;
-      setPos({ ...clamped });
+      posRef.current = c;
+      setPos({ ...c });
     }
   };
 
-  const handleTouchEnd = () => {
+  const onTouchEnd = (e) => {
     lastTouchDist.current = null;
     dragging.current = false;
   };
 
-  const resetZoom = (e) => {
-    e.stopPropagation();
-    currentZoom.current = 1;
-    currentPos.current = { x: 0, y: 0 };
-    setZoom(1);
-    setPos({ x: 0, y: 0 });
-  };
-
   const handleCardClick = (e) => {
-    if (currentZoom.current > 1) { resetZoom(e); return; }
-    onClick();
+    if (moved.current) {
+      moved.current = false;
+      return;
+    }
+    if (zoomRef.current > 1) {
+      reset();
+      return;
+    }
+    onClick(activeVariant);
   };
 
   return (
@@ -322,52 +348,67 @@ const ShoeCard = ({ shoe, onClick, isAdmin, onEdit, onDelete }) => {
       <div
         ref={imgWrapRef}
         className="card-image-wrap"
-        onMouseDown={handleMouseDown}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        style={{
-          cursor: currentZoom.current > 1 ? (dragging.current ? "grabbing" : "grab") : "pointer",
-          overflow: "hidden",
-        }}
+        onMouseDown={onMouseDown}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        style={{ overflow: "hidden", cursor: zoom > 1 ? "grab" : "pointer" }}
       >
-        {shoe.image_base64 ? (
+        {activeImg ? (
           <>
             {!imgLoaded && <div className="img-skeleton" />}
             <img
-              src={shoe.image_base64}
+              src={activeImg}
               alt={shoe.name}
               className={`card-img ${imgLoaded ? "loaded" : ""}`}
               onLoad={() => setImgLoaded(true)}
               draggable={false}
               style={{
                 transform: `scale(${zoom}) translate(${pos.x / zoom}px, ${pos.y / zoom}px)`,
-                transition: dragging.current ? "none" : "transform 0.2s ease",
+                transition: dragging.current ? "none" : "transform 0.15s ease",
                 userSelect: "none",
                 pointerEvents: "none",
+                willChange: "transform",
               }}
             />
           </>
         ) : (
-          <div className="card-no-img"><ImageIcon /></div>
+          <div className="card-no-img">
+            <ImageIcon />
+          </div>
         )}
 
-        {isZoomed && (
+        {zoom > 1 && (
           <button
             className="card-zoom-reset"
-            onClick={resetZoom}
-            title="Restablecer zoom"
-          >⤢</button>
+            onClick={(e) => {
+              e.stopPropagation();
+              reset();
+            }}
+            title="Restablecer"
+          >
+            ⤢
+          </button>
         )}
 
         {shoe.category && <span className="card-badge">{shoe.category}</span>}
-
         {isAdmin && (
-          <div className="card-admin-actions" onClick={(e) => e.stopPropagation()}>
-            <button className="card-action-btn edit" onClick={() => onEdit(shoe)} title="Editar">
+          <div
+            className="card-admin-actions"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              className="card-action-btn edit"
+              onClick={() => onEdit(shoe)}
+              title="Editar"
+            >
               <EditIcon />
             </button>
-            <button className="card-action-btn delete" onClick={() => onDelete(shoe)} title="Eliminar">
+            <button
+              className="card-action-btn delete"
+              onClick={() => onDelete(shoe)}
+              title="Eliminar"
+            >
               <TrashIcon />
             </button>
           </div>
@@ -377,12 +418,51 @@ const ShoeCard = ({ shoe, onClick, isAdmin, onEdit, onDelete }) => {
       <div className="card-body">
         <p className="card-brand">{shoe.brand || "Sin marca"}</p>
         <h3 className="card-name">{shoe.name || "Sin nombre"}</h3>
+        {variants.length > 1 && (
+          <div
+            style={{
+              display: "flex",
+              gap: 5,
+              marginBottom: 8,
+              flexWrap: "wrap",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {variants.map((v, i) => (
+              <button
+                key={v.id || i}
+                title={v.color}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveVariant(i);
+                  setImgLoaded(false);
+                }}
+                style={{
+                  width: 16,
+                  height: 16,
+                  borderRadius: "50%",
+                  border: "none",
+                  padding: 0,
+                  cursor: "pointer",
+                  flexShrink: 0,
+                  background: colorToHex(v.color),
+                  outline:
+                    activeVariant === i
+                      ? "2px solid var(--accent)"
+                      : "2px solid transparent",
+                  outlineOffset: 2,
+                  transition: "outline 0.15s",
+                }}
+              />
+            ))}
+          </div>
+        )}
         <div className="card-footer">
-          {shoe.price > 0 && (
+          {/* {shoe.price > 0 && (
             <span className="card-price">
               ${Number(shoe.price).toLocaleString("es-CO")}
             </span>
-          )}
+          )} */}
           {shoe.color && <ColorDot color={shoe.color} />}
         </div>
       </div>
@@ -444,8 +524,165 @@ function ColorDot({ color }) {
   );
 }
 
-// ── Detail Modal ────────────────────────────────────────────────────────────
+// ── Full Image Viewer ────────────────────────────────────────────────────────
+const FullImageViewer = ({ src, onClose }) => {
+  const [scale, setScale] = useState(1);
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const dragging = useRef(false);
+  const dragStart = useRef({ x: 0, y: 0 });
+  const posRef = useRef({ x: 0, y: 0 });
+  const scaleRef = useRef(1);
+  const wrapRef = useRef();
+  const lastTouchDist = useRef(null);
+
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const onWheel = (e) => {
+      e.preventDefault();
+      const delta = e.deltaY < 0 ? 0.2 : -0.2;
+      const next = Math.min(5, Math.max(1, scaleRef.current + delta));
+      scaleRef.current = next;
+      setScale(next);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
+  useEffect(() => {
+    const onMove = (e) => {
+      if (!dragging.current) return;
+      const nx = e.clientX - dragStart.current.x;
+      const ny = e.clientY - dragStart.current.y;
+      posRef.current = { x: nx, y: ny };
+      setPos({ x: nx, y: ny });
+    };
+    const onUp = () => { dragging.current = false; };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const onMouseDown = (e) => {
+    e.preventDefault();
+    dragging.current = true;
+    dragStart.current = { x: e.clientX - posRef.current.x, y: e.clientY - posRef.current.y };
+  };
+
+  const onTouchStart = (e) => {
+    if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      lastTouchDist.current = Math.hypot(dx, dy);
+    } else {
+      dragging.current = true;
+      dragStart.current = { x: e.touches[0].clientX - posRef.current.x, y: e.touches[0].clientY - posRef.current.y };
+    }
+  };
+
+  const onTouchMove = (e) => {
+    e.preventDefault();
+    if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const dist = Math.hypot(dx, dy);
+      if (lastTouchDist.current) {
+        const delta = (dist - lastTouchDist.current) * 0.015;
+        const next = Math.min(5, Math.max(1, scaleRef.current + delta));
+        scaleRef.current = next;
+        setScale(next);
+      }
+      lastTouchDist.current = dist;
+    } else if (dragging.current) {
+      const nx = e.touches[0].clientX - dragStart.current.x;
+      const ny = e.touches[0].clientY - dragStart.current.y;
+      posRef.current = { x: nx, y: ny };
+      setPos({ x: nx, y: ny });
+    }
+  };
+
+  const onTouchEnd = () => { dragging.current = false; lastTouchDist.current = null; };
+
+  const reset = () => {
+    scaleRef.current = 1; posRef.current = { x: 0, y: 0 };
+    setScale(1); setPos({ x: 0, y: 0 });
+  };
+
+  return (
+    <div
+      style={{
+        position: "fixed", inset: 0, zIndex: 1000,
+        background: "rgba(0,0,0,0.95)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}
+      onClick={onClose}
+    >
+      <div
+        ref={wrapRef}
+        style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={onMouseDown}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+      >
+        <img
+          src={src}
+          alt=""
+          draggable={false}
+          style={{
+            maxWidth: "90vw", maxHeight: "90vh",
+            objectFit: "contain",
+            transform: `scale(${scale}) translate(${pos.x / scale}px, ${pos.y / scale}px)`,
+            transition: dragging.current ? "none" : "transform 0.15s ease",
+            cursor: scale > 1 ? "grab" : "zoom-in",
+            userSelect: "none",
+            willChange: "transform",
+          }}
+        />
+      </div>
+
+      {/* Controles */}
+      <button onClick={onClose} style={{
+        position: "absolute", top: 16, right: 16,
+        background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)",
+        color: "#fff", borderRadius: "50%", width: 40, height: 40,
+        fontSize: 20, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+      }}>✕</button>
+
+      {scale > 1 && (
+        <button onClick={reset} style={{
+          position: "absolute", bottom: 20, left: "50%", transform: "translateX(-50%)",
+          background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)",
+          color: "#fff", borderRadius: 100, padding: "8px 20px", fontSize: 13, cursor: "pointer",
+        }}>⤢ Restablecer</button>
+      )}
+    </div>
+  );
+};
+
+// ── Detail Modal ─────────────────────────────────────────────────────────────
 const DetailModal = ({ shoe, onClose, isAdmin, onEdit, onDelete }) => {
+  const variants = shoe.variants || [];
+  const [activeVariant, setActiveVariant] = useState(shoe.initialVariant ?? 0);
+  const [activeImg, setActiveImg] = useState(null);
+  const [fullImg, setFullImg] = useState(null);
+
+  const currentVariant = variants[activeVariant];
+  const allImages = currentVariant
+    ? [currentVariant.main_image, ...(currentVariant.images || [])].filter(Boolean)
+    : [shoe.image_base64].filter(Boolean);
+
+  useEffect(() => {
+    setActiveImg(allImages[0] || null);
+  }, [activeVariant]);
+
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -453,94 +690,117 @@ const DetailModal = ({ shoe, onClose, isAdmin, onEdit, onDelete }) => {
   }, [onClose]);
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="detail-modal" onClick={(e) => e.stopPropagation()}>
-        <button className="modal-close" onClick={onClose}>
-          <CloseIcon />
-        </button>
+    <>
+      <div className="modal-overlay" onClick={onClose}>
+        <div className="detail-modal" onClick={(e) => e.stopPropagation()}>
+          <button className="modal-close" onClick={onClose}><CloseIcon /></button>
 
-        <div className="detail-layout">
-          <div className="detail-img-side">
-            {shoe.image_base64 ? (
-              <img
-                src={shoe.image_base64}
-                alt={shoe.name}
-                className="detail-img"
-              />
-            ) : (
-              <div className="detail-no-img">
-                <ImageIcon />
+          <div className="detail-layout">
+            {/* ── Lado imagen ── */}
+            <div className="detail-img-side" style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+
+              {/* Imagen principal grande */}
+              <div
+                style={{ flex: 1, minHeight: 260, background: "var(--surface2)", cursor: "zoom-in", overflow: "hidden", borderRadius: "20px 0 0 0" }}
+                onClick={() => activeImg && setFullImg(activeImg)}
+              >
+                {activeImg
+                  ? <img src={activeImg} alt={shoe.name} style={{ width: "100%", height: "100%", objectFit: "contain", display: "block", transition: "opacity 0.2s" }} />
+                  : <div className="detail-no-img"><ImageIcon /></div>
+                }
               </div>
-            )}
-          </div>
 
-          <div className="detail-info-side">
-            <p className="detail-brand">{shoe.brand}</p>
-            <h2 className="detail-name">{shoe.name}</h2>
-            {/* {shoe.price > 0 && (
-              <p className="detail-price">
-                ${Number(shoe.price).toLocaleString("es-CO")}
-              </p>
-            )} */}
+              {/* Miniaturas de ángulos */}
+              {allImages.length > 1 && (
+                <div style={{
+                  display: "flex", gap: 6, padding: "10px 12px",
+                  background: "var(--surface2)", overflowX: "auto",
+                  borderTop: "1px solid var(--border)",
+                }}>
+                  {allImages.map((img, i) => (
+                    <div
+                      key={i}
+                      onClick={() => setActiveImg(img)}
+                      style={{
+                        width: 56, height: 56, flexShrink: 0, borderRadius: 8,
+                        overflow: "hidden", cursor: "pointer",
+                        border: activeImg === img ? "2px solid var(--accent)" : "2px solid transparent",
+                        transition: "border 0.15s",
+                      }}
+                    >
+                      <img src={img} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                    </div>
+                  ))}
+                </div>
+              )}
 
-            <div className="detail-chips">
-              {shoe.category && <span className="chip">{shoe.category}</span>}
-              {shoe.color && <span className="chip">{shoe.color}</span>}
-              {shoe.sole && <span className="chip">Suela: {shoe.sole}</span>}
-              {shoe.size && <span className="chip">Talla: {shoe.size}</span>}
+              {/* Puntos de color (variantes) */}
+              {variants.length > 1 && (
+                <div style={{
+                  display: "flex", gap: 8, padding: "10px 14px", alignItems: "center",
+                  background: "var(--surface2)", borderTop: "1px solid var(--border)",
+                  borderRadius: "0 0 0 20px",
+                }}>
+                  <span style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Color:</span>
+                  {variants.map((v, i) => (
+                    <button
+                      key={v.id || i}
+                      title={v.color}
+                      onClick={() => setActiveVariant(i)}
+                      style={{
+                        width: 20, height: 20, borderRadius: "50%", border: "none",
+                        padding: 0, cursor: "pointer", flexShrink: 0,
+                        background: colorToHex(v.color),
+                        outline: activeVariant === i ? "2px solid var(--accent)" : "2px solid transparent",
+                        outlineOffset: 2, transition: "outline 0.15s",
+                      }}
+                    />
+                  ))}
+                  {currentVariant && (
+                    <span style={{ fontSize: 12, color: "var(--muted)", marginLeft: 4 }}>{currentVariant.color}</span>
+                  )}
+                </div>
+              )}
             </div>
 
-            <div className="detail-specs">
-              {shoe.model && (
-                <div className="spec-row">
-                  <span>Modelo</span>
-                  <strong>{shoe.model}</strong>
-                </div>
-              )}
-              {shoe.reference && (
-                <div className="spec-row">
-                  <span>Referencia</span>
-                  <strong>{shoe.reference}</strong>
-                </div>
-              )}
-              {shoe.material && (
-                <div className="spec-row">
-                  <span>Material</span>
-                  <strong>{shoe.material}</strong>
+            {/* ── Lado info ── */}
+            <div className="detail-info-side">
+              <p className="detail-brand">{shoe.brand}</p>
+              <h2 className="detail-name">{shoe.name}</h2>
+
+              <div className="detail-chips">
+                {shoe.category && <span className="chip">{shoe.category}</span>}
+                {currentVariant?.color && <span className="chip">{currentVariant.color}</span>}
+                {shoe.sole && <span className="chip">Suela: {shoe.sole}</span>}
+                {shoe.size && <span className="chip">Talla: {shoe.size}</span>}
+              </div>
+
+              <div className="detail-specs">
+                {shoe.model && <div className="spec-row"><span>Modelo</span><strong>{shoe.model}</strong></div>}
+                {shoe.reference && <div className="spec-row"><span>Referencia</span><strong>{shoe.reference}</strong></div>}
+                {shoe.material && <div className="spec-row"><span>Material</span><strong>{shoe.material}</strong></div>}
+              </div>
+
+              {shoe.description && <p className="detail-desc">{shoe.description}</p>}
+
+              {isAdmin && (
+                <div className="detail-admin-btns">
+                  <button className="btn-outline" onClick={() => { onEdit(shoe); onClose(); }}>
+                    <EditIcon /> Editar
+                  </button>
+                  <button className="btn-danger" onClick={() => { onDelete(shoe); onClose(); }}>
+                    <TrashIcon /> Eliminar
+                  </button>
                 </div>
               )}
             </div>
-
-            {shoe.description && (
-              <p className="detail-desc">{shoe.description}</p>
-            )}
-
-            {isAdmin && (
-              <div className="detail-admin-btns">
-                <button
-                  className="btn-outline"
-                  onClick={() => {
-                    onEdit(shoe);
-                    onClose();
-                  }}
-                >
-                  <EditIcon /> Editar
-                </button>
-                <button
-                  className="btn-danger"
-                  onClick={() => {
-                    onDelete(shoe);
-                    onClose();
-                  }}
-                >
-                  <TrashIcon /> Eliminar
-                </button>
-              </div>
-            )}
           </div>
         </div>
       </div>
-    </div>
+
+      {/* Visor pantalla completa */}
+      {fullImg && <FullImageViewer src={fullImg} onClose={() => setFullImg(null)} />}
+    </>
   );
 };
 
@@ -1183,6 +1443,63 @@ const ShoeFormModal = ({ initial, token, onClose, onSaved }) => {
   const [cropSrc, setCropSrc] = useState(null); // 👈 nuevo
   const fileRef = useRef();
   const isEdit = !!initial?.id;
+  // Variantes
+  const [variants, setVariants] = useState(
+    initial?.variants?.map((v) => ({ ...v, tempId: v.id })) || [],
+  );
+  const [cropState, setCropState] = useState(null); // { variantIndex, target: "main"|"angle", src }
+
+  const updateVariant = (i, key, val) =>
+    setVariants((vs) =>
+      vs.map((v, idx) => (idx === i ? { ...v, [key]: val } : v)),
+    );
+
+  const removeAngle = (vi, ii) =>
+    setVariants((vs) =>
+      vs.map((v, idx) =>
+        idx === vi ? { ...v, images: v.images.filter((_, i) => i !== ii) } : v,
+      ),
+    );
+
+  const openCrop = (variantIndex, target) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      setCropState({ variantIndex, target, src: URL.createObjectURL(file) });
+    };
+    input.click();
+  };
+
+  const handleVariantCrop = async (dataUrl) => {
+    const { variantIndex, target } = cropState;
+    setCropState(null);
+
+    // Subir a Supabase
+    const res = await fetch(dataUrl);
+    const blob = await res.blob();
+    const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.png`;
+    const { data, error } = await supabase.storage
+      .from("zapatos")
+      .upload(fileName, blob, { upsert: false, contentType: "image/png" });
+    if (error) {
+      alert("Error subiendo imagen: " + error.message);
+      return;
+    }
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from("zapatos").getPublicUrl(data.path);
+
+    setVariants((vs) =>
+      vs.map((v, idx) => {
+        if (idx !== variantIndex) return v;
+        if (target === "main") return { ...v, main_image: publicUrl };
+        return { ...v, images: [...(v.images || []), publicUrl] };
+      }),
+    );
+  };
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -1210,13 +1527,48 @@ const ShoeFormModal = ({ initial, token, onClose, onSaved }) => {
         },
         body: JSON.stringify({ ...form, price: parseFloat(form.price) || 0 }),
       });
-      if (res.ok) {
-        onSaved();
-        onClose();
-      } else {
+      if (!res.ok) {
         const d = await res.json();
         alert(d.detail || "Error al guardar");
+        setSaving(false);
+        return;
       }
+      const saved = await res.json();
+      const shoeId = saved.id;
+
+      // Guardar variantes
+      for (const variant of variants) {
+        const vData = {
+          color: variant.color,
+          main_image: variant.main_image,
+          images: variant.images || [],
+        };
+        if (variant.id) {
+          await fetch(
+            `${BACKEND_URL}/api/admin/shoes/${shoeId}/variants/${variant.id}`,
+            {
+              method: "PUT",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify(vData),
+            },
+          );
+        } else {
+          await fetch(`${BACKEND_URL}/api/admin/shoes/${shoeId}/variants`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(vData),
+          });
+        }
+      }
+
+      onSaved();
+      onClose();
     } catch {
       alert("Error de conexión");
     }
@@ -1229,11 +1581,11 @@ const ShoeFormModal = ({ initial, token, onClose, onSaved }) => {
     { key: "category", label: "Categoría" },
     { key: "model", label: "Modelo" },
     { key: "reference", label: "Referencia" },
-    { key: "color", label: "Color" },
+    // { key: "color", label: "Color" },
     { key: "sole", label: "Suela" },
     { key: "material", label: "Material" },
     { key: "size", label: "Talla" },
-    { key: "price", label: "Precio", type: "number" },
+    // { key: "price", label: "Precio", type: "number" },
     { key: "description", label: "Descripción", full: true, area: true },
   ];
 
@@ -1247,74 +1599,256 @@ const ShoeFormModal = ({ initial, token, onClose, onSaved }) => {
           </button>
         </div>
 
-        {/* Image upload */}
-        <div
-          className="img-upload-area"
-          onClick={() => fileRef.current.click()}
-        >
-          {preview ? (
-            <div className="img-upload-preview-wrap">
-              {/* Vista previa estilo tarjeta del catálogo */}
-              <div className="img-card-preview">
-                <div className="img-card-thumb">
-                  <img src={preview} alt="preview" className="img-card-img" />
+        {/* ── Variantes de color ── */}
+        <div style={{ padding: "0 28px 16px" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: 12,
+            }}
+          >
+            <p
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: "var(--muted)",
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+              }}
+            >
+              Colores y fotos
+            </p>
+            <button
+              className="btn-outline"
+              style={{ padding: "5px 14px", fontSize: 12 }}
+              onClick={() =>
+                setVariants((v) => [
+                  ...v,
+                  {
+                    tempId: Date.now(),
+                    color: "",
+                    main_image: "",
+                    images: [],
+                    showCrop: false,
+                    cropSrc: null,
+                    cropTarget: null,
+                  },
+                ])
+              }
+            >
+              + Añadir color
+            </button>
+          </div>
+
+          {variants.length === 0 && (
+            <p
+              style={{
+                fontSize: 12,
+                color: "var(--muted)",
+                textAlign: "center",
+                padding: "16px 0",
+              }}
+            >
+              Sin variantes — añade al menos un color con foto
+            </p>
+          )}
+
+          {variants.map((variant, vi) => (
+            <div
+              key={variant.tempId || variant.id}
+              style={{
+                background: "var(--surface2)",
+                borderRadius: 12,
+                border: "1px solid var(--border2)",
+                padding: 14,
+                marginBottom: 10,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  alignItems: "center",
+                  marginBottom: 10,
+                }}
+              >
+                <input
+                  type="text"
+                  placeholder="Color (ej: Negro, Blanco…)"
+                  value={variant.color}
+                  onChange={(e) => updateVariant(vi, "color", e.target.value)}
+                  style={{
+                    flex: 1,
+                    background: "var(--surface)",
+                    border: "1px solid var(--border2)",
+                    borderRadius: 8,
+                    color: "var(--text)",
+                    padding: "8px 12px",
+                    fontSize: 13,
+                  }}
+                />
+                <button
+                  onClick={() =>
+                    setVariants((v) => v.filter((_, i) => i !== vi))
+                  }
+                  style={{
+                    color: "var(--danger)",
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    fontSize: 18,
+                    lineHeight: 1,
+                  }}
+                  title="Eliminar variante"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Foto principal */}
+              <p
+                style={{
+                  fontSize: 11,
+                  color: "var(--muted)",
+                  marginBottom: 6,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                }}
+              >
+                Foto principal
+              </p>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  flexWrap: "wrap",
+                  marginBottom: 10,
+                }}
+              >
+                <div
+                  onClick={() => openCrop(vi, "main")}
+                  style={{
+                    width: 80,
+                    height: 80,
+                    borderRadius: 8,
+                    border: "2px dashed var(--border2)",
+                    cursor: "pointer",
+                    overflow: "hidden",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    background: "var(--surface)",
+                    flexShrink: 0,
+                  }}
+                >
+                  {variant.main_image ? (
+                    <img
+                      src={variant.main_image}
+                      alt=""
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "contain",
+                      }}
+                    />
+                  ) : (
+                    <span style={{ color: "var(--muted)", fontSize: 22 }}>
+                      +
+                    </span>
+                  )}
                 </div>
-                <div className="img-card-info">
-                  <p className="img-card-brand">{form.brand || "Marca"}</p>
-                  <p className="img-card-name">
-                    {form.name || "Nombre del zapato"}
-                  </p>
-                  <p className="img-card-price">
-                    {form.price
-                      ? `$${Number(form.price).toLocaleString("es-CO")}`
-                      : "$0"}
-                  </p>
+
+                {/* Fotos de ángulos */}
+                <p
+                  style={{
+                    fontSize: 11,
+                    color: "var(--muted)",
+                    width: "100%",
+                    marginBottom: 4,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                  }}
+                >
+                  Otros ángulos
+                </p>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {(variant.images || []).map((img, ii) => (
+                    <div
+                      key={ii}
+                      style={{
+                        position: "relative",
+                        width: 64,
+                        height: 64,
+                        borderRadius: 8,
+                        overflow: "hidden",
+                        border: "1px solid var(--border2)",
+                      }}
+                    >
+                      <img
+                        src={img}
+                        alt=""
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "contain",
+                        }}
+                      />
+                      <button
+                        onClick={() => removeAngle(vi, ii)}
+                        style={{
+                          position: "absolute",
+                          top: 2,
+                          right: 2,
+                          width: 18,
+                          height: 18,
+                          borderRadius: "50%",
+                          background: "rgba(0,0,0,0.7)",
+                          border: "none",
+                          color: "#fff",
+                          fontSize: 11,
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          lineHeight: 1,
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                  <div
+                    onClick={() => openCrop(vi, "angle")}
+                    style={{
+                      width: 64,
+                      height: 64,
+                      borderRadius: 8,
+                      border: "2px dashed var(--border2)",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      background: "var(--surface)",
+                    }}
+                  >
+                    <span style={{ color: "var(--muted)", fontSize: 20 }}>
+                      +
+                    </span>
+                  </div>
                 </div>
               </div>
-              <p className="img-change-hint">Clic para cambiar imagen</p>
             </div>
-          ) : (
-            <div className="img-upload-placeholder">
-              <ImageIcon />
-              <span>Clic para subir imagen</span>
-              <small>JPG, PNG, WEBP</small>
-            </div>
-          )}
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            onChange={handleImage}
-            hidden
-          />
+          ))}
         </div>
 
-        {cropSrc && (
+        {/* Cropper para variantes */}
+        {cropState && (
           <ImageCropper
-            src={cropSrc}
-            onCancel={() => setCropSrc(null)}
-            onConfirm={async (dataUrl) => {
-              setCropSrc(null);
-              setPreview(dataUrl);
-              // Convertir dataUrl a File y subir a Supabase
-              const res = await fetch(dataUrl);
-              const blob = await res.blob();
-              const fileName = `${Date.now()}-crop.jpg`;
-              const { data, error } = await supabase.storage
-                .from("zapatos")
-                .upload(fileName, blob, {
-                  upsert: false,
-                  contentType: "image/jpeg",
-                });
-              if (error) {
-                alert("Error subiendo imagen: " + error.message);
-                return;
-              }
-              const {
-                data: { publicUrl },
-              } = supabase.storage.from("zapatos").getPublicUrl(data.path);
-              set("image_base64", publicUrl);
-            }}
+            src={cropState.src}
+            onCancel={() => setCropState(null)}
+            onConfirm={(dataUrl) => handleVariantCrop(dataUrl)}
           />
         )}
 
@@ -1768,7 +2302,7 @@ export default function App() {
               <ShoeCard
                 key={shoe.id}
                 shoe={shoe}
-                onClick={() => setSelectedShoe(shoe)}
+                onClick={(variantIdx) => setSelectedShoe({ ...shoe, initialVariant: variantIdx ?? 0 })}
                 isAdmin={isAdmin}
                 onEdit={openEdit}
                 onDelete={openDelete}
