@@ -272,7 +272,7 @@ input, select, textarea { font-family: inherit; outline: none; }
 }
 .card-img {
   width: 100%; height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   opacity: 0;
   transition: opacity 0.3s ease, transform 0.4s ease;
 }
@@ -383,7 +383,7 @@ input, select, textarea { font-family: inherit; outline: none; }
 @media (max-width: 640px) { .detail-layout { grid-template-columns: 1fr; } }
 
 .detail-img-side { background: var(--surface2); border-radius: 20px 0 0 20px; overflow: hidden; }
-.detail-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.detail-img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .detail-no-img { display: flex; align-items: center; justify-content: center; height: 100%; min-height: 260px; }
 
 .detail-info-side { padding: 40px 36px 36px; }
@@ -585,3 +585,93 @@ input, select, textarea { font-family: inherit; outline: none; }
   .form-modal { border-radius: 16px 16px 0 0; position: fixed; bottom: 0; left: 0; right: 0; max-height: 92vh; width: 100%; max-width: 100%; margin: 0; border-radius: 20px 20px 0 0; }
   .detail-info-side { padding: 24px 20px; }
 }
+
+/* ── Image Upload rediseñado ─────────────────────────────────────────────── */
+.img-upload-area {
+  margin: 16px 28px;
+  border: 2px dashed var(--border2);
+  border-radius: var(--radius);
+  cursor: pointer;
+  min-height: 80px;
+  display: flex; align-items: center; justify-content: center;
+  transition: border-color var(--transition), background var(--transition);
+  position: relative;
+}
+.img-upload-area:hover { border-color: var(--accent); background: rgba(201,169,110,0.04); }
+
+/* Vista previa estilo tarjeta */
+.img-upload-preview-wrap { width: 100%; padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.img-card-preview {
+  width: 200px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  pointer-events: none;
+}
+.img-card-thumb {
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  background: var(--surface2);
+}
+.img-card-img { width: 100%; height: 100%; object-fit: contain; display: block; }
+
+.img-card-info { padding: 10px 12px 12px; }
+.img-card-brand { font-size: 10px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 2px; }
+.img-card-name { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.img-card-price { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--accent); }
+.img-change-hint { font-size: 11px; color: var(--muted); }
+
+/* ── Image Cropper ───────────────────────────────────────────────────────── */
+.cropper-modal {
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: 20px;
+  width: 100%; max-width: 400px;
+  padding: 28px;
+  display: flex; flex-direction: column; align-items: center; gap: 20px;
+  animation: modalIn 0.22s cubic-bezier(0.34,1.56,0.64,1);
+}
+.cropper-header { text-align: center; }
+.cropper-header h3 { font-size: 17px; font-weight: 700; margin-bottom: 4px; }
+.cropper-header p { font-size: 12px; color: var(--muted); }
+.cropper-canvas { border-radius: 12px; display: block; max-width: 100%; touch-action: none; }
+.cropper-zoom {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  font-size: 16px;
+}
+.cropper-slider {
+  flex: 1;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border2);
+  outline: none;
+}
+.cropper-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+}
+.cropper-actions { display: flex; gap: 10px; width: 100%; justify-content: flex-end; }
+
+.card-zoom-reset {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: rgba(13,13,13,0.75);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(201,169,110,0.4);
+  color: var(--accent);
+  font-size: 14px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition);
+  z-index: 10;
+}
+.card-zoom-reset:hover { background: rgba(201,169,110,0.2); }

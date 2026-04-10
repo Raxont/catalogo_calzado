@@ -181,10 +181,156 @@ const EmptyState = ({ isFiltered }) => (
 // ── Shoe Card ───────────────────────────────────────────────────────────────
 const ShoeCard = ({ shoe, onClick, isAdmin, onEdit, onDelete }) => {
   const [imgLoaded, setImgLoaded] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const dragging = useRef(false);
+  const dragStart = useRef({ x: 0, y: 0 });
+  const currentPos = useRef({ x: 0, y: 0 });
+  const currentZoom = useRef(1);
+  const imgWrapRef = useRef();
+  const lastTouchDist = useRef(null);
+
+  const isZoomed = zoom > 1;
+
+  const clampPos = (x, y, z) => {
+    const el = imgWrapRef.current;
+    if (!el) return { x, y };
+    const maxX = (el.offsetWidth  * (z - 1)) / 2;
+    const maxY = (el.offsetHeight * (z - 1)) / 2;
+    return {
+      x: Math.max(-maxX, Math.min(maxX, x)),
+      y: Math.max(-maxY, Math.min(maxY, y)),
+    };
+  };
+
+  // Registrar wheel con passive:false para poder hacer preventDefault
+  useEffect(() => {
+    const el = imgWrapRef.current;
+    if (!el) return;
+    const onWheel = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const delta = e.deltaY < 0 ? 0.25 : -0.25;
+      const next = Math.min(3, Math.max(1, currentZoom.current + delta));
+      const clamped = clampPos(currentPos.current.x, currentPos.current.y, next);
+      currentZoom.current = next;
+      currentPos.current = clamped;
+      setZoom(next);
+      setPos(clamped);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
+  // Registrar mousemove y mouseup en window para no perder eventos al salir del card
+  useEffect(() => {
+    const onMouseMove = (e) => {
+      if (!dragging.current) return;
+      const clamped = clampPos(
+        e.clientX - dragStart.current.x,
+        e.clientY - dragStart.current.y,
+        currentZoom.current
+      );
+      currentPos.current = clamped;
+      setPos({ ...clamped });
+    };
+    const onMouseUp = () => {
+      dragging.current = false;
+    };
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, []);
+
+  const handleMouseDown = (e) => {
+    if (currentZoom.current <= 1) return;
+    e.preventDefault();
+    e.stopPropagation();
+    dragging.current = true;
+    dragStart.current = {
+      x: e.clientX - currentPos.current.x,
+      y: e.clientY - currentPos.current.y,
+    };
+  };
+
+  const handleTouchStart = (e) => {
+    if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      lastTouchDist.current = Math.hypot(dx, dy);
+    } else if (e.touches.length === 1 && currentZoom.current > 1) {
+      e.preventDefault();
+      dragging.current = true;
+      dragStart.current = {
+        x: e.touches[0].clientX - currentPos.current.x,
+        y: e.touches[0].clientY - currentPos.current.y,
+      };
+    }
+  };
+
+  const handleTouchMove = (e) => {
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const dist = Math.hypot(dx, dy);
+      if (lastTouchDist.current) {
+        const delta = (dist - lastTouchDist.current) * 0.015;
+        const next = Math.min(3, Math.max(1, currentZoom.current + delta));
+        const clamped = clampPos(currentPos.current.x, currentPos.current.y, next);
+        currentZoom.current = next;
+        currentPos.current = clamped;
+        setZoom(next);
+        setPos(clamped);
+      }
+      lastTouchDist.current = dist;
+    } else if (e.touches.length === 1 && dragging.current) {
+      e.preventDefault();
+      const clamped = clampPos(
+        e.touches[0].clientX - dragStart.current.x,
+        e.touches[0].clientY - dragStart.current.y,
+        currentZoom.current
+      );
+      currentPos.current = clamped;
+      setPos({ ...clamped });
+    }
+  };
+
+  const handleTouchEnd = () => {
+    lastTouchDist.current = null;
+    dragging.current = false;
+  };
+
+  const resetZoom = (e) => {
+    e.stopPropagation();
+    currentZoom.current = 1;
+    currentPos.current = { x: 0, y: 0 };
+    setZoom(1);
+    setPos({ x: 0, y: 0 });
+  };
+
+  const handleCardClick = (e) => {
+    if (currentZoom.current > 1) { resetZoom(e); return; }
+    onClick();
+  };
 
   return (
-    <article className="shoe-card" onClick={onClick}>
-      <div className="card-image-wrap">
+    <article className="shoe-card" onClick={handleCardClick}>
+      <div
+        ref={imgWrapRef}
+        className="card-image-wrap"
+        onMouseDown={handleMouseDown}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        style={{
+          cursor: currentZoom.current > 1 ? (dragging.current ? "grabbing" : "grab") : "pointer",
+          overflow: "hidden",
+        }}
+      >
         {shoe.image_base64 ? (
           <>
             {!imgLoaded && <div className="img-skeleton" />}
@@ -193,43 +339,50 @@ const ShoeCard = ({ shoe, onClick, isAdmin, onEdit, onDelete }) => {
               alt={shoe.name}
               className={`card-img ${imgLoaded ? "loaded" : ""}`}
               onLoad={() => setImgLoaded(true)}
+              draggable={false}
+              style={{
+                transform: `scale(${zoom}) translate(${pos.x / zoom}px, ${pos.y / zoom}px)`,
+                transition: dragging.current ? "none" : "transform 0.2s ease",
+                userSelect: "none",
+                pointerEvents: "none",
+              }}
             />
           </>
         ) : (
-          <div className="card-no-img">
-            <ImageIcon />
-          </div>
+          <div className="card-no-img"><ImageIcon /></div>
         )}
+
+        {isZoomed && (
+          <button
+            className="card-zoom-reset"
+            onClick={resetZoom}
+            title="Restablecer zoom"
+          >⤢</button>
+        )}
+
         {shoe.category && <span className="card-badge">{shoe.category}</span>}
+
         {isAdmin && (
-          <div
-            className="card-admin-actions"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              className="card-action-btn edit"
-              onClick={() => onEdit(shoe)}
-              title="Editar"
-            >
+          <div className="card-admin-actions" onClick={(e) => e.stopPropagation()}>
+            <button className="card-action-btn edit" onClick={() => onEdit(shoe)} title="Editar">
               <EditIcon />
             </button>
-            <button
-              className="card-action-btn delete"
-              onClick={() => onDelete(shoe)}
-              title="Eliminar"
-            >
+            <button className="card-action-btn delete" onClick={() => onDelete(shoe)} title="Eliminar">
               <TrashIcon />
             </button>
           </div>
         )}
       </div>
+
       <div className="card-body">
         <p className="card-brand">{shoe.brand || "Sin marca"}</p>
         <h3 className="card-name">{shoe.name || "Sin nombre"}</h3>
         <div className="card-footer">
-          {/* <span className="card-price">
-            {shoe.price > 0 ? `$${Number(shoe.price).toLocaleString('es-CO')}` : '—'}
-          </span> */}
+          {shoe.price > 0 && (
+            <span className="card-price">
+              ${Number(shoe.price).toLocaleString("es-CO")}
+            </span>
+          )}
           {shoe.color && <ColorDot color={shoe.color} />}
         </div>
       </div>
@@ -391,6 +544,622 @@ const DetailModal = ({ shoe, onClose, isAdmin, onEdit, onDelete }) => {
   );
 };
 
+// ── Image Cropper Modal ──────────────────────────────────────────────────────
+const ImageCropper = ({ src, onConfirm, onCancel }) => {
+  const canvasRef = useRef();
+  const [scale, setScale] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [dragging, setDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [imgReady, setImgReady] = useState(false);
+  const [mode, setMode] = useState("move");
+  const [brushSize, setBrushSize] = useState(24);
+  const [brushColor, setBrushColor] = useState("transparent");
+  const imgRef = useRef(new Image());
+  const maskRef = useRef(null);
+  const paintLayerRef = useRef(null);
+  const isPainting = useRef(false);
+  const SIZE = 340;
+  const MIN_CROP = 40;
+  const HANDLE = 10; // radio zona sensible para agarrar borde/esquina
+
+  // Área de recorte: { x, y, w, h } en coordenadas canvas
+  const [crop, setCrop] = useState({
+    x: 20,
+    y: 20,
+    w: SIZE - 40,
+    h: SIZE - 40,
+  });
+  const cropRef = useRef({ x: 20, y: 20, w: SIZE - 40, h: SIZE - 40 });
+  const resizing = useRef(null); // qué handle se está arrastrando
+  const resizeStart = useRef(null);
+
+  // Sincronizar ref con state para usarlo en handlers
+  const syncCrop = (c) => {
+    cropRef.current = c;
+    setCrop(c);
+  };
+
+  // ── Carga imagen ────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const img = imgRef.current;
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const fit = Math.min(SIZE / img.width, SIZE / img.height) * 0.75;
+      setScale(fit);
+      setOffset({ x: 0, y: 0 });
+
+      const mask = document.createElement("canvas");
+      mask.width = img.width;
+      mask.height = img.height;
+      const mctx = mask.getContext("2d");
+      mctx.fillStyle = "white";
+      mctx.fillRect(0, 0, img.width, img.height);
+      maskRef.current = mask;
+
+      const paint = document.createElement("canvas");
+      paint.width = SIZE;
+      paint.height = SIZE;
+      paintLayerRef.current = paint;
+
+      setImgReady(true);
+    };
+    img.src = src;
+  }, [src]);
+
+  useEffect(() => {
+    if (imgReady) draw();
+  }, [scale, offset, imgReady, crop]);
+
+  // ── Dibujo ──────────────────────────────────────────────────────────────────
+  const draw = () => {
+    const canvas = canvasRef.current;
+    if (!canvas || !imgRef.current.complete || !maskRef.current) return;
+    const ctx = canvas.getContext("2d");
+    const img = imgRef.current;
+    const c = cropRef.current;
+    const w = img.width * scale;
+    const h = img.height * scale;
+    const x = (SIZE - w) / 2 + offset.x;
+    const y = (SIZE - h) / 2 + offset.y;
+
+    ctx.clearRect(0, 0, SIZE, SIZE);
+
+    // Tablero de ajedrez
+    const tile = 10;
+    for (let row = 0; row * tile < SIZE; row++) {
+      for (let col = 0; col * tile < SIZE; col++) {
+        ctx.fillStyle = (row + col) % 2 === 0 ? "#2a2a2a" : "#222";
+        ctx.fillRect(col * tile, row * tile, tile, tile);
+      }
+    }
+
+    // Imagen con máscara
+    const tmp = document.createElement("canvas");
+    tmp.width = SIZE;
+    tmp.height = SIZE;
+    const tctx = tmp.getContext("2d");
+    tctx.drawImage(img, x, y, w, h);
+    tctx.globalCompositeOperation = "destination-in";
+    tctx.drawImage(maskRef.current, x, y, w, h);
+    ctx.drawImage(tmp, 0, 0);
+
+    // Capa de pintura
+    if (paintLayerRef.current) ctx.drawImage(paintLayerRef.current, 0, 0);
+
+    // Overlay oscuro fuera del recorte
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    ctx.fillRect(0, 0, SIZE, c.y); // arriba
+    ctx.fillRect(0, c.y + c.h, SIZE, SIZE - c.y - c.h); // abajo
+    ctx.fillRect(0, c.y, c.x, c.h); // izquierda
+    ctx.fillRect(c.x + c.w, c.y, SIZE - c.x - c.w, c.h); // derecha
+
+    // Borde dorado
+    ctx.strokeStyle = "rgba(201,169,110,0.9)";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(c.x, c.y, c.w, c.h);
+
+    // Líneas de tercios
+    ctx.strokeStyle = "rgba(201,169,110,0.25)";
+    ctx.lineWidth = 1;
+    const t3w = c.w / 3;
+    const t3h = c.h / 3;
+    for (let i = 1; i < 3; i++) {
+      ctx.beginPath();
+      ctx.moveTo(c.x + t3w * i, c.y);
+      ctx.lineTo(c.x + t3w * i, c.y + c.h);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(c.x, c.y + t3h * i);
+      ctx.lineTo(c.x + c.w, c.y + t3h * i);
+      ctx.stroke();
+    }
+
+    // Handles en esquinas y puntos medios de bordes
+    const handles = getHandlePositions(c);
+    handles.forEach(({ hx, hy }) => {
+      ctx.fillStyle = "rgba(201,169,110,1)";
+      ctx.strokeStyle = "#0d0d0d";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(hx, hy, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    });
+  };
+
+  // ── Posiciones de los 8 handles ────────────────────────────────────────────
+  const getHandlePositions = (c) => [
+    { id: "tl", hx: c.x, hy: c.y },
+    { id: "tc", hx: c.x + c.w / 2, hy: c.y },
+    { id: "tr", hx: c.x + c.w, hy: c.y },
+    { id: "ml", hx: c.x, hy: c.y + c.h / 2 },
+    { id: "mr", hx: c.x + c.w, hy: c.y + c.h / 2 },
+    { id: "bl", hx: c.x, hy: c.y + c.h },
+    { id: "bc", hx: c.x + c.w / 2, hy: c.y + c.h },
+    { id: "br", hx: c.x + c.w, hy: c.y + c.h },
+  ];
+
+  // ── Detectar qué handle está bajo el cursor ─────────────────────────────────
+  const getHitHandle = (px, py) => {
+    const c = cropRef.current;
+    const handles = getHandlePositions(c);
+    for (const { id, hx, hy } of handles) {
+      if (Math.hypot(px - hx, py - hy) <= HANDLE + 4) return id;
+    }
+    return null;
+  };
+
+  // ── Cursor según posición ───────────────────────────────────────────────────
+  const getCursor = (px, py) => {
+    if (mode !== "move") return mode === "erase" ? "cell" : "crosshair";
+    const hit = getHitHandle(px, py);
+    const cursors = {
+      tl: "nw-resize",
+      tr: "ne-resize",
+      bl: "sw-resize",
+      br: "se-resize",
+      tc: "n-resize",
+      bc: "s-resize",
+      ml: "w-resize",
+      mr: "e-resize",
+    };
+    return cursors[hit] || "grab";
+  };
+
+  // ── Aplicar resize según handle ─────────────────────────────────────────────
+  const applyResize = (handle, dx, dy, startCrop) => {
+    let { x, y, w, h } = startCrop;
+    if (handle.includes("r")) {
+      w = Math.max(MIN_CROP, w + dx);
+    }
+    if (handle.includes("l")) {
+      const nw = Math.max(MIN_CROP, w - dx);
+      x = x + w - nw;
+      w = nw;
+    }
+    if (handle.includes("b")) {
+      h = Math.max(MIN_CROP, h + dy);
+    }
+    if (handle.includes("t")) {
+      const nh = Math.max(MIN_CROP, h - dy);
+      y = y + h - nh;
+      h = nh;
+    }
+    // Clamp dentro del canvas
+    x = Math.max(0, Math.min(x, SIZE - MIN_CROP));
+    y = Math.max(0, Math.min(y, SIZE - MIN_CROP));
+    w = Math.min(w, SIZE - x);
+    h = Math.min(h, SIZE - y);
+    return { x, y, w, h };
+  };
+
+  // ── getPos helper ──────────────────────────────────────────────────────────
+  const getPos = (e) => {
+    const rect = canvasRef.current.getBoundingClientRect();
+    return {
+      x: (e.clientX - rect.left) * (SIZE / rect.width),
+      y: (e.clientY - rect.top) * (SIZE / rect.height),
+    };
+  };
+
+  // ── Pintar máscara ─────────────────────────────────────────────────────────
+  const paintMask = (cx, cy) => {
+    const img = imgRef.current;
+    const w = img.width * scale;
+    const h = img.height * scale;
+    const ix = (SIZE - w) / 2 + offset.x;
+    const iy = (SIZE - h) / 2 + offset.y;
+    const r = brushSize / scale;
+
+    if (mode === "restore") {
+      const mctx = maskRef.current.getContext("2d");
+      mctx.globalCompositeOperation = "source-over";
+      mctx.fillStyle = "white";
+      mctx.beginPath();
+      mctx.arc((cx - ix) / scale, (cy - iy) / scale, r, 0, Math.PI * 2);
+      mctx.fill();
+    } else if (mode === "erase") {
+      if (brushColor === "transparent") {
+        const mctx = maskRef.current.getContext("2d");
+        mctx.globalCompositeOperation = "destination-out";
+        mctx.fillStyle = "rgba(0,0,0,1)";
+        mctx.beginPath();
+        mctx.arc((cx - ix) / scale, (cy - iy) / scale, r, 0, Math.PI * 2);
+        mctx.fill();
+      } else {
+        const pctx = paintLayerRef.current.getContext("2d");
+        pctx.globalCompositeOperation = "source-over";
+        pctx.fillStyle = brushColor;
+        pctx.beginPath();
+        pctx.arc(cx, cy, brushSize, 0, Math.PI * 2);
+        pctx.fill();
+      }
+    }
+    draw();
+  };
+
+  // ── Eventos ────────────────────────────────────────────────────────────────
+  const onMouseDown = (e) => {
+    const pos = getPos(e);
+    if (mode !== "move") {
+      isPainting.current = true;
+      paintMask(pos.x, pos.y);
+      return;
+    }
+    const hit = getHitHandle(pos.x, pos.y);
+    if (hit) {
+      resizing.current = hit;
+      resizeStart.current = { pos, crop: { ...cropRef.current } };
+    } else {
+      setDragging(true);
+      setDragStart({ x: e.clientX - offset.x, y: e.clientY - offset.y });
+    }
+  };
+
+  const onMouseMove = (e) => {
+    const pos = getPos(e);
+    if (canvasRef.current)
+      canvasRef.current.style.cursor = getCursor(pos.x, pos.y);
+
+    if (mode !== "move") {
+      if (isPainting.current) paintMask(pos.x, pos.y);
+      return;
+    }
+    if (resizing.current && resizeStart.current) {
+      const dx = pos.x - resizeStart.current.pos.x;
+      const dy = pos.y - resizeStart.current.pos.y;
+      const newCrop = applyResize(
+        resizing.current,
+        dx,
+        dy,
+        resizeStart.current.crop,
+      );
+      syncCrop(newCrop);
+    } else if (dragging) {
+      setOffset({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
+    }
+  };
+
+  const onMouseUp = () => {
+    setDragging(false);
+    isPainting.current = false;
+    resizing.current = null;
+    resizeStart.current = null;
+  };
+
+  const onTouchStart = (e) => {
+    e.preventDefault();
+    const t = e.touches[0];
+    const pos = getPos(t);
+    if (mode !== "move") {
+      isPainting.current = true;
+      paintMask(pos.x, pos.y);
+      return;
+    }
+    const hit = getHitHandle(pos.x, pos.y);
+    if (hit) {
+      resizing.current = hit;
+      resizeStart.current = { pos, crop: { ...cropRef.current } };
+    } else {
+      setDragging(true);
+      setDragStart({ x: t.clientX - offset.x, y: t.clientY - offset.y });
+    }
+  };
+
+  const onTouchMove = (e) => {
+    e.preventDefault();
+    const t = e.touches[0];
+    const pos = getPos(t);
+    if (mode !== "move") {
+      if (isPainting.current) paintMask(pos.x, pos.y);
+      return;
+    }
+    if (resizing.current && resizeStart.current) {
+      const dx = pos.x - resizeStart.current.pos.x;
+      const dy = pos.y - resizeStart.current.pos.y;
+      const newCrop = applyResize(
+        resizing.current,
+        dx,
+        dy,
+        resizeStart.current.crop,
+      );
+      syncCrop(newCrop);
+    } else if (dragging) {
+      setOffset({ x: t.clientX - dragStart.x, y: t.clientY - dragStart.y });
+    }
+  };
+
+  // ── Reset máscara ──────────────────────────────────────────────────────────
+  const resetMask = () => {
+    const mctx = maskRef.current.getContext("2d");
+    mctx.globalCompositeOperation = "source-over";
+    mctx.fillStyle = "white";
+    mctx.fillRect(0, 0, maskRef.current.width, maskRef.current.height);
+    const pctx = paintLayerRef.current.getContext("2d");
+    pctx.clearRect(0, 0, SIZE, SIZE);
+    draw();
+  };
+
+  // ── Exportar ───────────────────────────────────────────────────────────────
+  const handleConfirm = () => {
+    const img = imgRef.current;
+    const c = cropRef.current;
+    const EXPORT_SCALE = Math.round(img.width / (c.w / scale)); // escala real de la imagen original
+
+    const full = document.createElement("canvas");
+    full.width = SIZE * EXPORT_SCALE;
+    full.height = SIZE * EXPORT_SCALE;
+    const fctx = full.getContext("2d");
+
+    const iw = img.width * scale * EXPORT_SCALE;
+    const ih = img.height * scale * EXPORT_SCALE;
+    const ix = ((SIZE - img.width * scale) / 2 + offset.x) * EXPORT_SCALE;
+    const iy = ((SIZE - img.height * scale) / 2 + offset.y) * EXPORT_SCALE;
+
+    fctx.drawImage(img, ix, iy, iw, ih);
+
+    if (maskRef.current) {
+      fctx.globalCompositeOperation = "destination-in";
+      fctx.drawImage(maskRef.current, ix, iy, iw, ih);
+      fctx.globalCompositeOperation = "source-over";
+    }
+
+    if (paintLayerRef.current) {
+      fctx.drawImage(
+        paintLayerRef.current,
+        0,
+        0,
+        SIZE,
+        SIZE,
+        0,
+        0,
+        SIZE * EXPORT_SCALE,
+        SIZE * EXPORT_SCALE,
+      );
+    }
+
+    const out = document.createElement("canvas");
+    out.width = Math.round(c.w * EXPORT_SCALE);
+    out.height = Math.round(c.h * EXPORT_SCALE);
+    const octx = out.getContext("2d");
+    const pixels = fctx.getImageData(
+      Math.round(c.x * EXPORT_SCALE),
+      Math.round(c.y * EXPORT_SCALE),
+      Math.round(c.w * EXPORT_SCALE),
+      Math.round(c.h * EXPORT_SCALE),
+    );
+    octx.putImageData(pixels, 0, 0);
+
+    onConfirm(out.toDataURL("image/png", 1.0));
+  };
+
+  const modeBtn = (m, label, title) => (
+    <button
+      title={title}
+      onClick={() => setMode(m)}
+      style={{
+        padding: "7px 14px",
+        borderRadius: "100px",
+        fontSize: "13px",
+        fontWeight: 600,
+        border:
+          mode === m
+            ? "1.5px solid var(--accent)"
+            : "1.5px solid var(--border2)",
+        background: mode === m ? "rgba(201,169,110,0.15)" : "transparent",
+        color: mode === m ? "var(--accent)" : "var(--muted)",
+        cursor: "pointer",
+        transition: "all 0.18s",
+      }}
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="cropper-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="cropper-header">
+          <h3>Ajustar imagen</h3>
+          <p>
+            {mode === "move" &&
+              "Arrastra imagen · Arrastra esquinas/bordes del recuadro"}
+            {mode === "erase" && "Pinta sobre el fondo para borrarlo"}
+            {mode === "restore" && "Pinta para restaurar partes borradas"}
+          </p>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            gap: "8px",
+            alignItems: "center",
+            flexWrap: "wrap",
+            justifyContent: "center",
+          }}
+        >
+          {modeBtn("move", "✋ Mover", "Mover y redimensionar")}
+          {modeBtn("erase", "🧹 Borrar", "Borrar fondo")}
+          {modeBtn("restore", "🖌️ Restaurar", "Restaurar partes borradas")}
+          <button
+            onClick={resetMask}
+            style={{
+              padding: "7px 12px",
+              borderRadius: "100px",
+              fontSize: "13px",
+              border: "1.5px solid var(--border2)",
+              background: "transparent",
+              color: "var(--muted)",
+              cursor: "pointer",
+            }}
+          >
+            ↺ Reset
+          </button>
+        </div>
+
+        <canvas
+          ref={canvasRef}
+          width={SIZE}
+          height={SIZE}
+          className="cropper-canvas"
+          onMouseDown={onMouseDown}
+          onMouseMove={onMouseMove}
+          onMouseUp={onMouseUp}
+          onMouseLeave={onMouseUp}
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onMouseUp}
+        />
+
+        <div className="cropper-zoom">
+          <span>🔍</span>
+          <input
+            type="range"
+            min={0.1}
+            max={3}
+            step={0.001}
+            value={scale}
+            onChange={(e) => setScale(parseFloat(e.target.value))}
+            className="cropper-slider"
+          />
+          <span>🔎</span>
+        </div>
+
+        {mode !== "move" && (
+          <div className="cropper-zoom">
+            <span style={{ fontSize: "11px" }}>pincel</span>
+            <input
+              type="range"
+              min={4}
+              max={60}
+              step={1}
+              value={brushSize}
+              onChange={(e) => setBrushSize(parseInt(e.target.value))}
+              className="cropper-slider"
+            />
+            <span
+              style={{
+                width: Math.max(8, brushSize * 0.6),
+                height: Math.max(8, brushSize * 0.6),
+                borderRadius: "50%",
+                flexShrink: 0,
+                display: "inline-block",
+                background:
+                  mode === "erase" ? "var(--danger)" : "var(--accent)",
+              }}
+            />
+          </div>
+        )}
+
+        {mode === "erase" && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              width: "100%",
+              flexWrap: "wrap",
+            }}
+          >
+            <span style={{ fontSize: "12px", color: "var(--muted)" }}>
+              Color del pincel:
+            </span>
+            <div
+              style={{
+                display: "flex",
+                gap: "6px",
+                flexWrap: "wrap",
+                alignItems: "center",
+              }}
+            >
+              {[
+                { color: "transparent", label: "Borrar" },
+                { color: "#ffffff", label: "Blanco" },
+                { color: "#000000", label: "Negro" },
+                { color: "#f5f0e8", label: "Crema" },
+                { color: "#d0d0d0", label: "Gris" },
+                { color: "#c8b49a", label: "Beige" },
+              ].map(({ color, label }) => (
+                <button
+                  key={color}
+                  title={label}
+                  onClick={() => setBrushColor(color)}
+                  style={{
+                    width: color === "transparent" ? "auto" : "24px",
+                    height: "24px",
+                    padding: color === "transparent" ? "0 8px" : 0,
+                    borderRadius: color === "transparent" ? "100px" : "50%",
+                    background: color === "transparent" ? "transparent" : color,
+                    border:
+                      brushColor === color
+                        ? "2.5px solid var(--accent)"
+                        : "2px solid var(--border2)",
+                    cursor: "pointer",
+                    fontSize: "11px",
+                    color: "var(--muted)",
+                    flexShrink: 0,
+                    backgroundImage:
+                      color === "transparent"
+                        ? "linear-gradient(45deg,#444 25%,transparent 25%,transparent 75%,#444 75%),linear-gradient(45deg,#444 25%,transparent 25%,transparent 75%,#444 75%)"
+                        : "none",
+                    backgroundSize: "8px 8px",
+                    backgroundPosition: "0 0, 4px 4px",
+                  }}
+                >
+                  {color === "transparent" ? "✕ Borrar" : ""}
+                </button>
+              ))}
+              <input
+                type="color"
+                title="Color personalizado"
+                onChange={(e) => setBrushColor(e.target.value)}
+                style={{
+                  width: "24px",
+                  height: "24px",
+                  borderRadius: "50%",
+                  border: "2px solid var(--border2)",
+                  cursor: "pointer",
+                  padding: 0,
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        <div className="cropper-actions">
+          <button className="btn-ghost" onClick={onCancel}>
+            Cancelar
+          </button>
+          <button className="btn-primary" onClick={handleConfirm}>
+            ✓ Usar esta imagen
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ── Shoe Form Modal ──────────────────────────────────────────────────────────
 const ShoeFormModal = ({ initial, token, onClose, onSaved }) => {
   const [form, setForm] = useState(
@@ -411,6 +1180,7 @@ const ShoeFormModal = ({ initial, token, onClose, onSaved }) => {
   );
   const [saving, setSaving] = useState(false);
   const [preview, setPreview] = useState(initial?.image_base64 || "");
+  const [cropSrc, setCropSrc] = useState(null); // 👈 nuevo
   const fileRef = useRef();
   const isEdit = !!initial?.id;
 
@@ -419,30 +1189,9 @@ const ShoeFormModal = ({ initial, token, onClose, onSaved }) => {
   const handleImage = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
-    // Preview local inmediato
     const localUrl = URL.createObjectURL(file);
-    setPreview(localUrl);
-
-    // Subir a Supabase Storage
-    const ext = file.name.split(".").pop();
-    const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-
-    const { data, error } = await supabase.storage
-      .from("zapatos")
-      .upload(fileName, file, { upsert: false });
-
-    if (error) {
-      alert("Error subiendo imagen: " + error.message);
-      return;
-    }
-
-    // Obtener URL pública
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from("zapatos").getPublicUrl(data.path);
-
-    set("image_base64", publicUrl); // reutilizamos el mismo campo, ahora guarda la URL
+    setCropSrc(localUrl); // abrir recortador
+    e.target.value = ""; // reset input
   };
 
   const handleSubmit = async () => {
@@ -489,7 +1238,7 @@ const ShoeFormModal = ({ initial, token, onClose, onSaved }) => {
   ];
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay">
       <div className="form-modal" onClick={(e) => e.stopPropagation()}>
         <div className="form-modal-header">
           <h2>{isEdit ? "Editar producto" : "Nuevo producto"}</h2>
@@ -500,15 +1249,35 @@ const ShoeFormModal = ({ initial, token, onClose, onSaved }) => {
 
         {/* Image upload */}
         <div
-          className="img-upload-zone"
+          className="img-upload-area"
           onClick={() => fileRef.current.click()}
         >
           {preview ? (
-            <img src={preview} alt="preview" className="img-preview" />
+            <div className="img-upload-preview-wrap">
+              {/* Vista previa estilo tarjeta del catálogo */}
+              <div className="img-card-preview">
+                <div className="img-card-thumb">
+                  <img src={preview} alt="preview" className="img-card-img" />
+                </div>
+                <div className="img-card-info">
+                  <p className="img-card-brand">{form.brand || "Marca"}</p>
+                  <p className="img-card-name">
+                    {form.name || "Nombre del zapato"}
+                  </p>
+                  <p className="img-card-price">
+                    {form.price
+                      ? `$${Number(form.price).toLocaleString("es-CO")}`
+                      : "$0"}
+                  </p>
+                </div>
+              </div>
+              <p className="img-change-hint">Clic para cambiar imagen</p>
+            </div>
           ) : (
             <div className="img-upload-placeholder">
               <ImageIcon />
               <span>Clic para subir imagen</span>
+              <small>JPG, PNG, WEBP</small>
             </div>
           )}
           <input
@@ -519,6 +1288,35 @@ const ShoeFormModal = ({ initial, token, onClose, onSaved }) => {
             hidden
           />
         </div>
+
+        {cropSrc && (
+          <ImageCropper
+            src={cropSrc}
+            onCancel={() => setCropSrc(null)}
+            onConfirm={async (dataUrl) => {
+              setCropSrc(null);
+              setPreview(dataUrl);
+              // Convertir dataUrl a File y subir a Supabase
+              const res = await fetch(dataUrl);
+              const blob = await res.blob();
+              const fileName = `${Date.now()}-crop.jpg`;
+              const { data, error } = await supabase.storage
+                .from("zapatos")
+                .upload(fileName, blob, {
+                  upsert: false,
+                  contentType: "image/jpeg",
+                });
+              if (error) {
+                alert("Error subiendo imagen: " + error.message);
+                return;
+              }
+              const {
+                data: { publicUrl },
+              } = supabase.storage.from("zapatos").getPublicUrl(data.path);
+              set("image_base64", publicUrl);
+            }}
+          />
+        )}
 
         <div className="form-grid">
           {fields.map((f) => (
@@ -567,6 +1365,7 @@ const LoginModal = ({ onClose, onLogin }) => {
   const [pw, setPw] = useState("");
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPw, setShowPw] = useState(false);
 
   const handleLogin = async () => {
     if (!pw.trim()) return;
@@ -604,18 +1403,75 @@ const LoginModal = ({ onClose, onLogin }) => {
         <p className="login-sub">
           Ingresa la contraseña para gestionar el catálogo
         </p>
-        <input
-          type="password"
-          className={`login-input ${err ? "error" : ""}`}
-          placeholder="Contraseña"
-          value={pw}
-          onChange={(e) => {
-            setPw(e.target.value);
-            setErr("");
-          }}
-          onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-          autoFocus
-        />
+        <div style={{ position: "relative", marginBottom: "10px" }}>
+          <input
+            type={showPw ? "text" : "password"}
+            className={`login-input ${err ? "error" : ""}`}
+            placeholder="Contraseña"
+            value={pw}
+            onChange={(e) => {
+              setPw(e.target.value);
+              setErr("");
+            }}
+            onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+            autoFocus
+            style={{ marginBottom: 0, paddingRight: "44px" }}
+          />
+          <button
+            type="button"
+            onClick={() => setShowPw((v) => !v)}
+            style={{
+              position: "absolute",
+              right: "12px",
+              top: "50%",
+              transform: "translateY(-50%)",
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: "4px",
+              color: "var(--muted)",
+              display: "flex",
+              alignItems: "center",
+            }}
+            tabIndex={-1}
+            title={showPw ? "Ocultar contraseña" : "Mostrar contraseña"}
+          >
+            {showPw ? (
+              /* Ojo tachado — ocultar */
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+                <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+                <line x1="1" y1="1" x2="23" y2="23" />
+              </svg>
+            ) : (
+              /* Ojo abierto — mostrar */
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+            )}
+          </button>
+        </div>
         {err && <p className="login-error">{err}</p>}
         <button
           className="btn-primary full-width"
@@ -755,7 +1611,6 @@ export default function App() {
       <header className="header">
         <div className="header-inner">
           <a className="logo" href="/">
-
             <span className="logo-text">Inicio</span>
           </a>
 
