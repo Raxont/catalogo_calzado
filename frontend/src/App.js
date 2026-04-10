@@ -416,7 +416,6 @@ const ShoeCard = ({ shoe, onClick, isAdmin, onEdit, onDelete }) => {
       </div>
 
       <div className="card-body">
-        <p className="card-brand">{shoe.brand || "Sin marca"}</p>
         <h3 className="card-name">{shoe.name || "Sin nombre"}</h3>
         {variants.length > 1 && (
           <div
@@ -765,7 +764,6 @@ const DetailModal = ({ shoe, onClose, isAdmin, onEdit, onDelete }) => {
 
             {/* ── Lado info ── */}
             <div className="detail-info-side">
-              <p className="detail-brand">{shoe.brand}</p>
               <h2 className="detail-name">{shoe.name}</h2>
 
               <div className="detail-chips">
@@ -1577,7 +1575,6 @@ const ShoeFormModal = ({ initial, token, onClose, onSaved }) => {
 
   const fields = [
     { key: "name", label: "Nombre *", full: true },
-    { key: "brand", label: "Marca" },
     { key: "category", label: "Categoría" },
     { key: "model", label: "Modelo" },
     { key: "reference", label: "Referencia" },
@@ -2082,8 +2079,8 @@ export default function App() {
   });
   const [showFilters, setShowFilters] = useState(false);
 
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [adminToken, setAdminToken] = useState("");
+  const [adminToken, setAdminToken] = useState(() => localStorage.getItem("adminToken") || "");
+  const [isAdmin, setIsAdmin] = useState(() => !!localStorage.getItem("adminToken"));
   const [showLogin, setShowLogin] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editShoe, setEditShoe] = useState(null);
@@ -2098,7 +2095,6 @@ export default function App() {
       if (filters.category) params.set("category", filters.category);
       if (filters.sole) params.set("sole", filters.sole);
       if (filters.color) params.set("color", filters.color);
-      if (filters.brand) params.set("brand", filters.brand);
       const res = await fetch(`${BACKEND_URL}/api/shoes?${params}`);
       if (res.ok) setShoes(await res.json());
     } catch {}
@@ -2121,14 +2117,17 @@ export default function App() {
 
   const setFilter = (k, v) => setFilters((f) => ({ ...f, [k]: v }));
   const clearFilters = () =>
-    setFilters({ search: "", category: "", sole: "", color: "", brand: "" });
+    setFilters({ search: "", category: "", sole: "", color: "" });
   const hasActiveFilters = Object.values(filters).some((v) => v !== "");
 
   const handleLogin = (token) => {
+    localStorage.setItem("adminToken", token);
     setAdminToken(token);
     setIsAdmin(true);
   };
+
   const handleLogout = () => {
+    localStorage.removeItem("adminToken");
     setIsAdmin(false);
     setAdminToken("");
   };
@@ -2229,18 +2228,6 @@ export default function App() {
                 {filterOptions.categories?.map((c) => (
                   <option key={c} value={c}>
                     {c}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={filters.brand}
-                onChange={(e) => setFilter("brand", e.target.value)}
-                className="filter-select"
-              >
-                <option value="">Marca</option>
-                {filterOptions.brands?.map((b) => (
-                  <option key={b} value={b}>
-                    {b}
                   </option>
                 ))}
               </select>
