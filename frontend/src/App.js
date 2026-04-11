@@ -444,7 +444,7 @@ const ShoeCard = ({ shoe, onClick, isAdmin, onEdit, onDelete }) => {
                   padding: 0,
                   cursor: "pointer",
                   flexShrink: 0,
-                  background: colorToHex(v.color),
+                  background: colorToBackground(v.color),
                   outline:
                     activeVariant === i
                       ? "2px solid var(--accent)"
@@ -477,6 +477,9 @@ const COLOR_MAP = {
   verde: "#43a047",
   amarillo: "#fdd835",
   cafe: "#795548",
+  café: "#795548",     // ← NUEVO (con tilde)
+  cafe: "#795548",     // ← ya existe pero por si acaso
+  chocolate: "#5d4037",// ← NUEVO
   gris: "#9e9e9e",
   naranja: "#fb8c00",
   morado: "#8e24aa",
@@ -486,11 +489,30 @@ const COLOR_MAP = {
   plateado: "#bdbdbd",
   celeste: "#4fc3f7",
   vinotinto: "#880e4f",
+  // colores adicionales útiles:
+  crema: "#f5f0e8",
+  camel: "#c19a6b",
+  tan: "#d2b48c",
+  miel: "#d4a017",
+  tierra: "#a0522d",
 };
 
 function colorToHex(color) {
   const k = color?.toLowerCase().trim();
   return COLOR_MAP[k] || "#888";
+}
+
+// Para botones que muestran colores combinados (ej: "Negro/Cafe")
+function colorToBackground(color) {
+  if (!color) return "#888";
+  const parts = color
+    .split(/[\/\-]+/)
+    .map((c) => c.trim())
+    .filter(Boolean);
+  if (parts.length === 1) return colorToHex(parts[0]);
+  const c1 = colorToHex(parts[0]);
+  const c2 = colorToHex(parts[1]);
+  return `linear-gradient(135deg, ${c1} 50%, ${c2} 50%)`;
 }
 
 // Supports single colors and combinations like "negro/cafe" or "blanco/negro"
@@ -749,7 +771,7 @@ const DetailModal = ({ shoe, onClose, isAdmin, onEdit, onDelete }) => {
                       style={{
                         width: 20, height: 20, borderRadius: "50%", border: "none",
                         padding: 0, cursor: "pointer", flexShrink: 0,
-                        background: colorToHex(v.color),
+                        background: colorToBackground(v.color),
                         outline: activeVariant === i ? "2px solid var(--accent)" : "2px solid transparent",
                         outlineOffset: 2, transition: "outline 0.15s",
                       }}
@@ -768,8 +790,7 @@ const DetailModal = ({ shoe, onClose, isAdmin, onEdit, onDelete }) => {
 
               <div className="detail-chips">
                 {shoe.category && <span className="chip">{shoe.category}</span>}
-                {currentVariant?.color && <span className="chip">{currentVariant.color}</span>}
-                {shoe.sole && <span className="chip">Suela: {shoe.sole}</span>}
+                {/* {currentVariant?.color && <span className="chip">{currentVariant.color}</span>} */}
                 {shoe.size && <span className="chip">Talla: {shoe.size}</span>}
               </div>
 
@@ -1579,7 +1600,7 @@ const ShoeFormModal = ({ initial, token, onClose, onSaved }) => {
     { key: "model", label: "Modelo" },
     { key: "reference", label: "Referencia" },
     // { key: "color", label: "Color" },
-    { key: "sole", label: "Suela" },
+    // { key: "sole", label: "Suela" },
     { key: "material", label: "Material" },
     { key: "size", label: "Talla" },
     // { key: "price", label: "Precio", type: "number" },
@@ -2240,18 +2261,6 @@ export default function App() {
                 {filterOptions.colors?.map((c) => (
                   <option key={c} value={c}>
                     {c}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={filters.sole}
-                onChange={(e) => setFilter("sole", e.target.value)}
-                className="filter-select"
-              >
-                <option value="">Suela</option>
-                {filterOptions.soles?.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
                   </option>
                 ))}
               </select>
